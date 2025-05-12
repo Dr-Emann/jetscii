@@ -31,3 +31,6 @@ memchr = "2.0.0"
 [[bench]]
 name = "benchmarks"
 harness = false
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(jetscii_sse4_2, values("no", "maybe", "yes"))'] }
