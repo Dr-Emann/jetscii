@@ -30,7 +30,10 @@ trait PackedCompareControl {
 
 #[inline]
 #[target_feature(enable = "sse4.2")]
-unsafe fn find_small<C, const CONTROL_BYTE: i32>(packed: PackedCompare<C, CONTROL_BYTE>, haystack: &[u8]) -> Option<usize>
+unsafe fn find_small<C, const CONTROL_BYTE: i32>(
+    packed: PackedCompare<C, CONTROL_BYTE>,
+    haystack: &[u8],
+) -> Option<usize>
 where
     C: PackedCompareControl,
 {
@@ -52,7 +55,10 @@ where
 /// beginning of the byte slice.
 #[inline]
 #[target_feature(enable = "sse4.2")]
-unsafe fn find<C, const CONTROL_BYTE: i32>(packed: PackedCompare<C, CONTROL_BYTE>, mut haystack: &[u8]) -> Option<usize>
+unsafe fn find<C, const CONTROL_BYTE: i32>(
+    packed: PackedCompare<C, CONTROL_BYTE>,
+    mut haystack: &[u8],
+) -> Option<usize>
 where
     C: PackedCompareControl,
 {
@@ -270,7 +276,7 @@ pub struct ByteSubstring<'a> {
 }
 
 impl<'a> ByteSubstring<'a> {
-    pub fn new(needle: &'a[u8]) -> Self {
+    pub fn new(needle: &'a [u8]) -> Self {
         let mut simd_needle = [0; 16];
         let len = if simd_needle.len() < needle.len() {
             simd_needle.len()
@@ -299,7 +305,10 @@ impl<'a> ByteSubstring<'a> {
     pub unsafe fn find(&self, haystack: &[u8]) -> Option<usize> {
         let mut offset = 0;
 
-        while let Some(idx) = find(PackedCompare::<_, _SIDD_CMP_EQUAL_ORDERED>(self), &haystack[offset..]) {
+        while let Some(idx) = find(
+            PackedCompare::<_, _SIDD_CMP_EQUAL_ORDERED>(self),
+            &haystack[offset..],
+        ) {
             let abs_offset = offset + idx;
             // Found a match, but is it really?
             if haystack[abs_offset..].starts_with(self.complete_needle) {

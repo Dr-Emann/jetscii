@@ -141,50 +141,78 @@ use std::marker::PhantomData;
 
 include!(concat!(env!("OUT_DIR"), "/src/macros.rs"));
 
-#[cfg(any(jetscii_sse4_2 = "yes", jetscii_sse4_2 = "maybe"))]
 mod simd;
 
-#[cfg(any(jetscii_sse4_2 = "maybe", jetscii_sse4_2 = "no"))]
+// This module may not be used if e.g. we statically know we have the sse4.2 target feature
+#[allow(unused)]
 mod fallback;
 
 #[cfg(feature = "pattern")]
 mod pattern;
 
 macro_rules! dispatch {
-    (simd: $simd:expr,fallback: $fallback:expr,) => {
-        // If we can tell at compile time that we have support,
-        // call the optimized code directly.
-        #[cfg(jetscii_sse4_2 = "yes")]
+    (x86: $x86:expr, aarch64: $aarch64:expr, fallback: $fallback:expr,) => ({
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         {
-            $simd
+            dispatch!(
+                target_feature: "sse4.2",
+                is_feature_enabled: is_x86_feature_detected,
+                simd: $x86,
+                fallback: $fallback,
+            )
+        }
+
+        #[cfg(any(target_arch = "aarch64", target_arch = "arm64ec"))]
+        {
+            dispatch!(
+                target_feature: "neon",
+                is_feature_enabled: is_aarch64_feature_detected,
+                simd: $aarch64,
+                fallback: $fallback,
+            )
         }
 
         // If we can tell at compile time that we will *never* have
         // support, call the fallback directly.
-        #[cfg(jetscii_sse4_2 = "no")]
+        #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64", target_arch = "arm64ec")))]
         {
             $fallback
         }
-
-        // Otherwise, we will be run on a machine with or without
-        // support, so we perform runtime detection.
-        #[cfg(jetscii_sse4_2 = "maybe")]
-        {
-            if is_x86_feature_detected!("sse4.2") {
+    });
+    (target_feature: $target_feature:tt, is_feature_enabled: $is_feature_enabled:ident, simd: $simd:expr, fallback: $fallback:expr,) => ({
+            // If we can tell at compile time that we have support,
+            // call the optimized code directly.
+            #[cfg(target_feature = $target_feature)]
+            {
                 $simd
-            } else {
-                $fallback
             }
-        }
-    };
+            // Otherwise, we will be run on a machine with or without
+            // support, so we perform runtime detection.
+            #[cfg(not(target_feature = $target_feature))]
+            {
+                if std::arch::$is_feature_enabled!($target_feature) {
+                    $simd
+                } else {
+                    $fallback
+                }
+            }
+    });
 }
 
 /// Searches a slice for a set of bytes. Up to 16 bytes may be used.
 pub struct Bytes<F> {
-    #[cfg(any(jetscii_sse4_2 = "yes", jetscii_sse4_2 = "maybe"))]
-    simd: simd::Bytes,
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    x86: simd::x86::Bytes,
 
-    #[cfg(any(jetscii_sse4_2 = "maybe", jetscii_sse4_2 = "no"))]
+    #[cfg(any(target_arch = "aarch64", target_arch = "arm64ec"))]
+    aarch64: simd::aarch64::Bytes,
+
+    #[cfg(not(
+      any(
+        all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse4.2"),
+        all(any(target_arch = "aarch64", target_arch = "arm64ec"), target_feature = "neon"),
+      )
+    ))]
     fallback: fallback::Bytes<F>,
 
     // Since we might not use the fallback implementation, we add this
@@ -206,10 +234,18 @@ where
     #[must_use]
     pub fn new(bytes: [u8; 16], len: i32, fallback: F) -> Self {
         Bytes {
-            #[cfg(any(jetscii_sse4_2 = "yes", jetscii_sse4_2 = "maybe"))]
-            simd: simd::Bytes::new(bytes, len),
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            x86: simd::x86::Bytes::new(bytes, len),
 
-            #[cfg(any(jetscii_sse4_2 = "maybe", jetscii_sse4_2 = "no"))]
+            #[cfg(any(target_arch = "aarch64", target_arch = "arm64ec"))]
+            aarch64: simd::aarch64::Bytes::new(bytes, len),
+
+            #[cfg(not(
+                any(
+                    all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse4.2"),
+                    all(any(target_arch = "aarch64", target_arch = "arm64ec"), target_feature = "neon"),
+                )
+            ))]
             fallback: fallback::Bytes::new(fallback),
 
             _fallback: PhantomData,
@@ -221,7 +257,8 @@ where
     #[must_use]
     pub fn find(&self, haystack: &[u8]) -> Option<usize> {
         dispatch! {
-            simd: unsafe { self.simd.find(haystack) },
+            x86: unsafe { self.x86.find(haystack) },
+            aarch64: unsafe { self.aarch64.find(haystack) },
             fallback: self.fallback.find(haystack),
         }
     }
@@ -269,21 +306,33 @@ pub type AsciiCharsConst = AsciiChars<fn(u8) -> bool>;
 
 /// Searches a slice for the first occurence of the subslice.
 pub struct ByteSubstring<'a> {
-    #[cfg(any(jetscii_sse4_2 = "yes", jetscii_sse4_2 = "maybe"))]
-    simd: simd::ByteSubstring<'a>,
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    x86: simd::x86::ByteSubstring<'a>,
 
-    #[cfg(any(jetscii_sse4_2 = "maybe", jetscii_sse4_2 = "no"))]
+    #[cfg(not(
+        any(
+            all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse4.2"),
+            // No aarch64 simd implementation of substring search
+            // all(any(target_arch = "aarch64", target_arch = "arm64ec"), target_feature = "neon"),
+        )
+    ))]
     fallback: fallback::ByteSubstring<'a>,
 }
 
 impl<'a> ByteSubstring<'a> {
     #[must_use]
     pub fn new(needle: &'a [u8]) -> Self {
-        ByteSubstring {
-            #[cfg(any(jetscii_sse4_2 = "yes", jetscii_sse4_2 = "maybe"))]
-            simd: simd::ByteSubstring::new(needle),
+        Self {
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            x86: simd::x86::ByteSubstring::new(needle),
 
-            #[cfg(any(jetscii_sse4_2 = "maybe", jetscii_sse4_2 = "no"))]
+            #[cfg(not(
+                any(
+                    all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse4.2"),
+                    // No aarch64 simd implementation of substring search
+                    // all(any(target_arch = "aarch64", target_arch = "arm64ec"), target_feature = "neon"),
+                )
+            ))]
             fallback: fallback::ByteSubstring::new(needle),
         }
     }
@@ -292,7 +341,8 @@ impl<'a> ByteSubstring<'a> {
     #[must_use]
     fn needle_len(&self) -> usize {
         dispatch! {
-            simd: self.simd.needle_len(),
+            x86: self.x86.needle_len(),
+            aarch64: self.fallback.needle_len(),
             fallback: self.fallback.needle_len(),
         }
     }
@@ -302,7 +352,8 @@ impl<'a> ByteSubstring<'a> {
     #[must_use]
     pub fn find(&self, haystack: &[u8]) -> Option<usize> {
         dispatch! {
-            simd: unsafe { self.simd.find(haystack) },
+            x86: unsafe { self.x86.find(haystack) },
+            aarch64: self.fallback.find(haystack),
             fallback: self.fallback.find(haystack),
         }
     }

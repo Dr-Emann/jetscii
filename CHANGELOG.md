@@ -11,6 +11,7 @@ to [Semantic Versioning][].
 ## [Unreleased]
 
 - Trait bounds removed from generic types, bounds are only required for impls
+- Added SIMD implementation of `Bytes`/`AsciiChars` for aarch64 neon
 
 ## [0.5.3] - 2022-07-06
 
