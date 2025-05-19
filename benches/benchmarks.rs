@@ -49,21 +49,6 @@ fn spaces(c: &mut Criterion) {
         let space = space();
         b.iter(|| space.find(&haystack));
     });
-    group.bench_function("stdlib_find_string", |b| {
-        b.iter(|| haystack.find(" "));
-    });
-    group.bench_function("stdlib_find_char", |b| {
-        b.iter(|| haystack.find(' '));
-    });
-    group.bench_function("stdlib_find_char_set", |b| {
-        b.iter(|| haystack.find(&[' '][..]));
-    });
-    group.bench_function("stdlib_find_closure", |b| {
-        b.iter(|| haystack.find(|c| c == ' '));
-    });
-    group.bench_function("stdlib_iter_position", |b| {
-        b.iter(|| haystack.bytes().position(|c| c == b' '));
-    });
     group.bench_function("teddy", |b| {
         let searcher = aho_corasick::packed::Searcher::new([" "]).unwrap();
         b.iter(|| searcher.find(&haystack).map(|m| m.start()));
@@ -84,12 +69,6 @@ fn xml3(c: &mut Criterion) {
     group.bench_function("ascii_chars", |b| {
         let xml_delim_3 = xml_delim_3();
         b.iter(|| xml_delim_3.find(&haystack));
-    });
-    group.bench_function("stdlib_find_char_set", |b| {
-        b.iter(|| haystack.find(&['<', '>', '&'][..]));
-    });
-    group.bench_function("stdlib_find_closure", |b| {
-        b.iter(|| haystack.find(|c| c == '<' || c == '>' || c == '&'));
     });
     group.bench_function("stdlib_iter_position", |b| {
         b.iter(|| {
@@ -119,12 +98,6 @@ fn xml5(c: &mut Criterion) {
         let xml_delim_5 = xml_delim_5();
         b.iter(|| xml_delim_5.find(&haystack));
     });
-    group.bench_function("stdlib_find_char_set", |b| {
-        b.iter(|| haystack.find(&['<', '>', '&', '\'', '"'][..]));
-    });
-    group.bench_function("stdlib_find_closure", |b| {
-        b.iter(|| haystack.find(|c| c == '<' || c == '>' || c == '&' || c == '\'' || c == '"'));
-    });
     group.bench_function("stdlib_iter_position", |b| {
         b.iter(|| {
             haystack
@@ -135,16 +108,6 @@ fn xml5(c: &mut Criterion) {
     group.bench_function("teddy", |b| {
         let searcher = aho_corasick::packed::Searcher::new(["<", ">", "&", "'", "\""]).unwrap();
         b.iter(|| searcher.find(&haystack).map(|m| m.start()));
-    });
-    group.bench_function("memchr", |b| {
-        b.iter(|| {
-            let bytes = haystack.as_bytes();
-            let indexes = [
-                memchr::memchr3(b'<', b'>', b'&', bytes),
-                memchr::memchr2(b'\'', b'"', bytes),
-            ];
-            indexes.iter().copied().flatten().min()
-        });
     });
 }
 
@@ -160,37 +123,6 @@ fn big_16_benches(c: &mut Criterion) {
         let big_16 = big_16();
         b.iter(|| big_16.find(&haystack));
     });
-    group.bench_function("stdlib_find_char_set", |b| {
-        b.iter(|| {
-            haystack.find(
-                &[
-                    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-                ][..],
-            )
-        });
-    });
-    group.bench_function("stdlib_find_closure", |b| {
-        b.iter(|| {
-            haystack.find(|c| {
-                c == 'A'
-                    || c == 'B'
-                    || c == 'C'
-                    || c == 'D'
-                    || c == 'E'
-                    || c == 'F'
-                    || c == 'G'
-                    || c == 'H'
-                    || c == 'I'
-                    || c == 'J'
-                    || c == 'K'
-                    || c == 'L'
-                    || c == 'M'
-                    || c == 'N'
-                    || c == 'O'
-                    || c == 'P'
-            })
-        });
-    });
     group.bench_function("stdlib_iter_position", |b| {
         b.iter(|| {
             haystack.bytes().position(|c| {
@@ -216,20 +148,6 @@ fn big_16_benches(c: &mut Criterion) {
     group.bench_function("teddy", |b| {
         let searcher = aho_corasick::packed::Searcher::new(b"ABCDEFGHIJKLMNOP".iter().map(|b| std::array::from_ref(b))).unwrap();
         b.iter(|| searcher.find(&haystack).map(|m| m.start()));
-    });
-    group.bench_function("memchr", |b| {
-        b.iter(|| {
-            let bytes = haystack.as_bytes();
-            let indexes = [
-                memchr::memchr3(b'A', b'B', b'C', bytes),
-                memchr::memchr3(b'D', b'E', b'F', bytes),
-                memchr::memchr3(b'G', b'H', b'I', bytes),
-                memchr::memchr3(b'J', b'K', b'L', bytes),
-                memchr::memchr3(b'M', b'N', b'O', bytes),
-                memchr::memchr(b'P', bytes),
-            ];
-            indexes.iter().copied().flatten().min()
-        })
     });
 
     group.finish();
@@ -244,37 +162,6 @@ fn big_16_benches(c: &mut Criterion) {
         let big_16 = big_16();
         b.iter(|| big_16.find(&haystack));
     });
-    group.bench_function("stdlib_find_char_set", |b| {
-        b.iter(|| {
-            haystack.find(
-                &[
-                    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-                ][..],
-            )
-        });
-    });
-    group.bench_function("stdlib_find_closure", |b| {
-        b.iter(|| {
-            haystack.find(|c| {
-                c == 'A'
-                    || c == 'B'
-                    || c == 'C'
-                    || c == 'D'
-                    || c == 'E'
-                    || c == 'F'
-                    || c == 'G'
-                    || c == 'H'
-                    || c == 'I'
-                    || c == 'J'
-                    || c == 'K'
-                    || c == 'L'
-                    || c == 'M'
-                    || c == 'N'
-                    || c == 'O'
-                    || c == 'P'
-            })
-        });
-    });
     group.bench_function("stdlib_iter_position", |b| {
         b.iter(|| {
             haystack.bytes().position(|c| {
@@ -300,20 +187,6 @@ fn big_16_benches(c: &mut Criterion) {
     group.bench_function("teddy", |b| {
         let searcher = aho_corasick::packed::Searcher::new(b"ABCDEFGHIJKLMNOP".iter().map(|b| std::array::from_ref(b))).unwrap();
         b.iter(|| searcher.find(&haystack).map(|m| m.start()));
-    });
-    group.bench_function("memchr", |b| {
-        b.iter(|| {
-            let bytes = haystack.as_bytes();
-            let indexes = [
-                memchr::memchr3(b'A', b'B', b'C', bytes),
-                memchr::memchr3(b'D', b'E', b'F', bytes),
-                memchr::memchr3(b'G', b'H', b'I', bytes),
-                memchr::memchr3(b'J', b'K', b'L', bytes),
-                memchr::memchr3(b'M', b'N', b'O', bytes),
-                memchr::memchr(b'P', bytes),
-            ];
-            indexes.iter().copied().flatten().min()
-        })
     });
 }
 
