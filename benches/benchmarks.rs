@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 use jetscii::{ascii_chars, AsciiCharsConst, SubstringConst};
 use std::hint::black_box;
 use std::sync::OnceLock;
@@ -24,7 +24,9 @@ fn xml_delim_5() -> &'static AsciiCharsConst {
 static BIG_16: OnceLock<AsciiCharsConst> = OnceLock::new();
 
 fn big_16() -> &'static AsciiCharsConst {
-    BIG_16.get_or_init(|| ascii_chars!('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'))
+    BIG_16.get_or_init(|| {
+        ascii_chars!('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P')
+    })
 }
 
 static SUBSTRING: OnceLock<SubstringConst> = OnceLock::new();
@@ -146,7 +148,10 @@ fn big_16_benches(c: &mut Criterion) {
         });
     });
     group.bench_function("teddy", |b| {
-        let searcher = aho_corasick::packed::Searcher::new(b"ABCDEFGHIJKLMNOP".iter().map(|b| std::array::from_ref(b))).unwrap();
+        let searcher = aho_corasick::packed::Searcher::new(
+            b"ABCDEFGHIJKLMNOP".iter().map(|b| std::array::from_ref(b)),
+        )
+        .unwrap();
         b.iter(|| searcher.find(&haystack).map(|m| m.start()));
     });
 
@@ -185,7 +190,10 @@ fn big_16_benches(c: &mut Criterion) {
         });
     });
     group.bench_function("teddy", |b| {
-        let searcher = aho_corasick::packed::Searcher::new(b"ABCDEFGHIJKLMNOP".iter().map(|b| std::array::from_ref(b))).unwrap();
+        let searcher = aho_corasick::packed::Searcher::new(
+            b"ABCDEFGHIJKLMNOP".iter().map(|b| std::array::from_ref(b)),
+        )
+        .unwrap();
         b.iter(|| searcher.find(&haystack).map(|m| m.start()));
     });
 }
@@ -211,5 +219,104 @@ fn substr(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, spaces, xml3, xml5, big_16_benches, substr);
+fn iterate_xml_many_match(c: &mut Criterion) {
+    let haystack = black_box(include_str!("plant_catalog.xml"));
+    let mut group = c.benchmark_group("iterate_xml_3");
+
+    group.throughput(Throughput::Bytes(haystack.len() as u64));
+    group.bench_function("ascii_chars", |b| {
+        let xml_delim_3 = xml_delim_3();
+        b.iter(|| {
+            let mut haystack = &haystack[..];
+            let mut offset = 0;
+            while let Some(pos) = xml_delim_3.find(haystack) {
+                haystack = &haystack[pos + 1..];
+                offset += pos;
+                black_box(offset);
+            }
+        });
+    });
+    group.bench_function("stdlib_iter_position", |b| {
+        b.iter(|| {
+            let mut haystack = &haystack[..];
+            let mut offset = 0;
+            while let Some(pos) = haystack
+                .bytes()
+                .position(|c| c == b'<' || c == b'>' || c == b'&')
+            {
+                haystack = &haystack[pos + 1..];
+                offset += pos;
+                black_box(offset);
+            }
+        });
+    });
+    group.bench_function("memchr", |b| {
+        b.iter_batched(
+            || memchr::memchr3_iter(b'<', b'>', b'&', haystack.as_bytes()),
+            |iter| {
+                for offset in iter {
+                    black_box(offset);
+                }
+            },
+            BatchSize::SmallInput,
+        );
+    });
+    group.finish();
+}
+
+fn iterate_few_match(c: &mut Criterion) {
+    let haystack = black_box(include_str!("plant_catalog.xml"));
+    let mut group = c.benchmark_group("iterate_few_matches");
+    let chars: AsciiCharsConst = ascii_chars!(b'?', b'-', b'\0');
+
+    group.throughput(Throughput::Bytes(haystack.len() as u64));
+    group.bench_function("ascii_chars", |b| {
+        b.iter(|| {
+            let mut haystack = &haystack[..];
+            let mut offset = 0;
+            while let Some(pos) = chars.find(haystack) {
+                haystack = &haystack[pos + 1..];
+                offset += pos;
+                black_box(offset);
+            }
+        });
+    });
+    group.bench_function("stdlib_iter_position", |b| {
+        b.iter(|| {
+            let mut haystack = &haystack[..];
+            let mut offset = 0;
+            while let Some(pos) = haystack
+                .bytes()
+                .position(|c| c == b'?' || c == b'-' || c == b'\0')
+            {
+                haystack = &haystack[pos + 1..];
+                offset += pos;
+                black_box(offset);
+            }
+        });
+    });
+    group.bench_function("memchr", |b| {
+        b.iter_batched(
+            || memchr::memchr3_iter(b'?', b'-', b'\0', haystack.as_bytes()),
+            |iter| {
+                for offset in iter {
+                    black_box(offset);
+                }
+            },
+            BatchSize::SmallInput,
+        );
+    });
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    spaces,
+    xml3,
+    xml5,
+    big_16_benches,
+    substr,
+    iterate_xml_many_match,
+    iterate_few_match,
+);
 criterion_main!(benches);
