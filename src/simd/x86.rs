@@ -237,6 +237,7 @@ impl<'a> Misalignment<'a> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Bytes {
     needle: __m128i,
     needle_len: i32,
@@ -254,6 +255,40 @@ impl Bytes {
     #[target_feature(enable = "sse4.2")]
     pub unsafe fn find(&self, haystack: &[u8]) -> Option<usize> {
         find(PackedCompare::<_, 0>(self), haystack)
+    }
+
+    pub fn iter(self, haystack: &[u8]) -> BytesIter<'_> {
+        BytesIter {
+            bytes: self,
+            haystack,
+            offset: 0,
+        }
+    }
+}
+
+pub struct BytesIter<'a> {
+    bytes: Bytes,
+    haystack: &'a [u8],
+    offset: usize,
+}
+
+impl Iterator for BytesIter<'_> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next_offset = unsafe { self.bytes.find(self.haystack) };
+        match next_offset {
+            Some(i) => {
+                self.haystack = &self.haystack[i + 1..];
+                let res = self.offset + i;
+                self.offset = res + 1;
+                Some(res)
+            }
+            None => {
+                self.haystack = &[];
+                None
+            }
+        }
     }
 }
 

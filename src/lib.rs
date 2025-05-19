@@ -207,12 +207,16 @@ pub struct Bytes<F> {
     #[cfg(any(target_arch = "aarch64", target_arch = "arm64ec"))]
     aarch64: simd::aarch64::Bytes,
 
-    #[cfg(not(
-      any(
-        all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse4.2"),
-        all(any(target_arch = "aarch64", target_arch = "arm64ec"), target_feature = "neon"),
-      )
-    ))]
+    #[cfg(not(any(
+        all(
+            any(target_arch = "x86", target_arch = "x86_64"),
+            target_feature = "sse4.2"
+        ),
+        all(
+            any(target_arch = "aarch64", target_arch = "arm64ec"),
+            target_feature = "neon"
+        ),
+    )))]
     fallback: fallback::Bytes<F>,
 
     // Since we might not use the fallback implementation, we add this
@@ -240,12 +244,16 @@ where
             #[cfg(any(target_arch = "aarch64", target_arch = "arm64ec"))]
             aarch64: simd::aarch64::Bytes::new(bytes, len),
 
-            #[cfg(not(
-                any(
-                    all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "sse4.2"),
-                    all(any(target_arch = "aarch64", target_arch = "arm64ec"), target_feature = "neon"),
-                )
-            ))]
+            #[cfg(not(any(
+                all(
+                    any(target_arch = "x86", target_arch = "x86_64"),
+                    target_feature = "sse4.2"
+                ),
+                all(
+                    any(target_arch = "aarch64", target_arch = "arm64ec"),
+                    target_feature = "neon"
+                ),
+            )))]
             fallback: fallback::Bytes::new(fallback),
 
             _fallback: PhantomData,
@@ -262,10 +270,130 @@ where
             fallback: self.fallback.find(haystack),
         }
     }
+
+    pub fn iter<'a>(&'a self, haystack: &'a [u8]) -> BytesIter<'a, F> {
+        dispatch! {
+            x86: BytesIter::X86(self.x86.iter(haystack)),
+            aarch64: BytesIter::Aarch64(self.aarch64.iter(haystack)),
+            fallback: BytesIter::Fallback(self.fallback.iter(haystack)),
+        }
+    }
 }
 
 /// A convenience type that can be used in a constant or static.
 pub type BytesConst = Bytes<fn(u8) -> bool>;
+
+pub enum BytesIter<'a, F> {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    X86(simd::x86::BytesIter<'a>),
+
+    #[cfg(any(target_arch = "aarch64", target_arch = "arm64ec"))]
+    Aarch64(simd::aarch64::BytesIter<'a>),
+
+    #[cfg(not(any(
+        all(
+            any(target_arch = "x86", target_arch = "x86_64"),
+            target_feature = "sse4.2"
+        ),
+        all(
+            any(target_arch = "aarch64", target_arch = "arm64ec"),
+            target_feature = "neon"
+        ),
+    )))]
+    Fallback(fallback::BytesIter<'a, F>),
+    // Since we might not use the fallback implementation, we add this
+    // to avoid unused type parameters.
+    // This type is impossible to construct, but we still use the F parameter
+    _Impossible(std::convert::Infallible, PhantomData<F>),
+}
+
+impl<'a, F> Iterator for BytesIter<'a, F>
+where
+    F: Fn(u8) -> bool,
+{
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            Self::X86(iter) => iter.next(),
+
+            #[cfg(any(target_arch = "aarch64", target_arch = "arm64ec"))]
+            Self::Aarch64(iter) => iter.next(),
+
+            #[cfg(not(any(
+                all(
+                    any(target_arch = "x86", target_arch = "x86_64"),
+                    target_feature = "sse4.2"
+                ),
+                all(
+                    any(target_arch = "aarch64", target_arch = "arm64ec"),
+                    target_feature = "neon"
+                ),
+            )))]
+            Self::Fallback(iter) => iter.next(),
+            // Since we might not use the fallback implementation, we add this
+            // to avoid unused type parameters.
+            // This type is impossible to construct, but we still use the F parameter
+            &mut Self::_Impossible(infailable, _) => match infailable {},
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            Self::X86(iter) => iter.size_hint(),
+
+            #[cfg(any(target_arch = "aarch64", target_arch = "arm64ec"))]
+            Self::Aarch64(iter) => iter.size_hint(),
+
+            #[cfg(not(any(
+                all(
+                    any(target_arch = "x86", target_arch = "x86_64"),
+                    target_feature = "sse4.2"
+                ),
+                all(
+                    any(target_arch = "aarch64", target_arch = "arm64ec"),
+                    target_feature = "neon"
+                ),
+            )))]
+            Self::Fallback(iter) => iter.size_hint(),
+            // Since we might not use the fallback implementation, we add this
+            // to avoid unused type parameters.
+            // This type is impossible to construct, but we still use the F parameter
+            &Self::_Impossible(infailable, _) => match infailable {},
+        }
+    }
+
+    fn count(self) -> usize
+    where
+        Self: Sized,
+    {
+        match self {
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            Self::X86(iter) => iter.count(),
+
+            #[cfg(any(target_arch = "aarch64", target_arch = "arm64ec"))]
+            Self::Aarch64(iter) => iter.count(),
+
+            #[cfg(not(any(
+                all(
+                    any(target_arch = "x86", target_arch = "x86_64"),
+                    target_feature = "sse4.2"
+                ),
+                all(
+                    any(target_arch = "aarch64", target_arch = "arm64ec"),
+                    target_feature = "neon"
+                ),
+            )))]
+            Self::Fallback(iter) => iter.count(),
+            // Since we might not use the fallback implementation, we add this
+            // to avoid unused type parameters.
+            // This type is impossible to construct, but we still use the F parameter
+            Self::_Impossible(infailable, _) => match infailable {},
+        }
+    }
+}
 
 /// Searches a string for a set of ASCII characters. Up to 16
 /// characters may be used.
@@ -299,10 +427,41 @@ where
     pub fn find(&self, haystack: &str) -> Option<usize> {
         self.0.find(haystack.as_bytes())
     }
+
+    /// Return an iterator over the indices of the specified characters in the haystack.
+    pub fn iter<'a>(&'a self, haystack: &'a str) -> AsciiCharsIter<'a, F> {
+        AsciiCharsIter(self.0.iter(haystack.as_bytes()))
+    }
+
+    /// Get a [`Bytes`] reference with the same ascii characters
+    pub fn as_bytes(&self) -> &Bytes<F> {
+        &self.0
+    }
 }
 
 /// A convenience type that can be used in a constant or static.
 pub type AsciiCharsConst = AsciiChars<fn(u8) -> bool>;
+
+pub struct AsciiCharsIter<'a, F>(BytesIter<'a, F>);
+
+impl<F> Iterator for AsciiCharsIter<'_, F>
+where
+    F: Fn(u8) -> bool,
+{
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+
+    fn count(self) -> usize {
+        self.0.count()
+    }
+}
 
 /// Searches a slice for the first occurence of the subslice.
 pub struct ByteSubstring<'a> {

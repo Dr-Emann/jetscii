@@ -226,15 +226,15 @@ fn iterate_xml_many_match(c: &mut Criterion) {
     group.throughput(Throughput::Bytes(haystack.len() as u64));
     group.bench_function("ascii_chars", |b| {
         let xml_delim_3 = xml_delim_3();
-        b.iter(|| {
-            let mut haystack = &haystack[..];
-            let mut offset = 0;
-            while let Some(pos) = xml_delim_3.find(haystack) {
-                haystack = &haystack[pos + 1..];
-                offset += pos;
-                black_box(offset);
-            }
-        });
+        b.iter_batched(
+            || xml_delim_3.as_bytes().iter(haystack.as_bytes()),
+            |iter| {
+                for offset in iter {
+                    black_box(offset);
+                }
+            },
+            BatchSize::SmallInput,
+        );
     });
     group.bench_function("stdlib_iter_position", |b| {
         b.iter(|| {
