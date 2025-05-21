@@ -1,3 +1,13 @@
+//! AArch64 NEON SIMD implementation
+//!
+//! Based on [this algorithm][1] simplified somewhat by aarch64 neon (by the ability to make a
+//! table of 32 bytes by combining two vectors), combined with 64 byte movemask via interleaving
+//! from [here][2], and the iteration idea (using a u64 bitset of known matches) from [here][3].
+//!
+//! [1]: http://0x80.pl/notesen/2018-10-18-simd-byte-lookup.html
+//! [2]: https://community.arm.com/arm-community-blogs/b/servers-and-cloud-computing-blog/posts/porting-x86-vector-bitmask-optimizations-to-arm-neon
+//! [3]: https://lemire.me/blog/2024/07/20/scan-html-even-faster-with-simd-instructions-c-and-c/
+
 use std::arch::aarch64::*;
 use std::mem::transmute;
 
